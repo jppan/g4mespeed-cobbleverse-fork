@@ -10,6 +10,7 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 
 public final class GSTpsCommand {
@@ -21,8 +22,17 @@ public final class GSTpsCommand {
 	
 	public static void registerCommand(CommandDispatcher<ServerCommandSource> dispatcher) {
 		LiteralArgumentBuilder<ServerCommandSource> builder = CommandManager.literal("tps").requires(context -> {
-			if (GSServerController.getInstance().getTpsModule().sRequireOP.get())
-				return context.getPermissions().hasPermission(GSServerController.OP_PERMISSION);
+			GSTpsModule tpsModule = GSServerController.getInstance().getTpsModule();
+			if (tpsModule.sRequireOP.get()) {
+				if (context.getPermissions().hasPermission(GSServerController.OP_PERMISSION))
+					return true;
+				try {
+					ServerPlayerEntity player = context.getPlayerOrThrow();
+					return tpsModule.isPlayerAllowedTpsChange(player);
+				} catch (CommandSyntaxException e) {
+					return false;
+				}
+			}
 			return true;
 		});
 		

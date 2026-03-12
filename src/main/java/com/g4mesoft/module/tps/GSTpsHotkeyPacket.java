@@ -15,14 +15,12 @@ import net.minecraft.server.network.ServerPlayerEntity;
 public class GSTpsHotkeyPacket implements GSIPacket {
 
 	private GSETpsHotkeyType type;
-	private boolean sneaking;
 	
 	public GSTpsHotkeyPacket() {
 	}
 	
-	public GSTpsHotkeyPacket(GSETpsHotkeyType type, boolean sneaking) {
+	public GSTpsHotkeyPacket(GSETpsHotkeyType type) {
 		this.type = type;
-		this.sneaking = sneaking;
 	}
 	
 	@Override
@@ -30,23 +28,21 @@ public class GSTpsHotkeyPacket implements GSIPacket {
 		type = GSETpsHotkeyType.fromIndex((int)buf.readByte());
 		if (type == null)
 			throw new IOException("Invalid hotkey type");
-		sneaking = buf.readBoolean();
 	}
 
 	@Override
 	public void write(GSEncodeBuffer buf) throws IOException {
 		buf.writeByte((byte)type.getIndex());
-		buf.writeBoolean(sneaking);
 	}
 
 	@Override
 	public void handleOnServer(GSServerController controller, ServerPlayerEntity player) {
-		controller.getTpsModule().onPlayerHotkey(player, type, sneaking);
+		controller.getTpsModule().onPlayerHotkey(player, type);
 	}
 
 	@Override
 	@Environment(EnvType.CLIENT)
 	public void handleOnClient(GSClientController controller) {
-		controller.getTpsModule().performHotkeyAction(type, sneaking);
+		controller.getTpsModule().performHotkeyAction(type);
 	}
 }

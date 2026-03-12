@@ -19,6 +19,7 @@ import com.g4mesoft.G4mespeedMod;
 import com.g4mesoft.GSExtensionInfo;
 import com.g4mesoft.access.client.GSIAbstractClientPlayerEntityAccess;
 import com.g4mesoft.access.common.GSIServerTickManagerAccess;
+import com.g4mesoft.core.GSCoreExtension;
 import com.g4mesoft.core.GSIModule;
 import com.g4mesoft.core.GSIModuleManager;
 import com.g4mesoft.core.client.GSClientController;
@@ -31,6 +32,7 @@ import com.g4mesoft.setting.GSSetting;
 import com.g4mesoft.setting.GSSettingCategory;
 import com.g4mesoft.setting.GSSettingManager;
 import com.g4mesoft.setting.types.GSBooleanSetting;
+import com.g4mesoft.setting.types.GSFloatSetting;
 import com.g4mesoft.setting.types.GSIntegerSetting;
 import com.g4mesoft.ui.util.GSMathUtil;
 import com.mojang.brigadier.CommandDispatcher;
@@ -65,8 +67,9 @@ public class GSTpsModule implements GSIModule {
 
 	private static final long SERVER_TPS_INTERVAL = 2000L;
 	
-	private static final float TPS_INCREMENT_INTERVAL = 1.0f;
-	private static final float TONE_MULTIPLIER = (float)Math.pow(2.0, 1.0 / 12.0);
+	private static final float HOTKEY_SPEEDUP_AMOUNT_MIN = 1.10f;
+	private static final float HOTKEY_SPEEDUP_AMOUNT_MAX = 10.0f;
+	private static final float HOTKEY_SPEEDUP_AMOUNT_STEP = 0.05f;
 	
 	public static final GSSettingCategory TPS_CATEGORY = new GSSettingCategory("tps");
 	public static final GSSettingCategory BETTER_PISTONS_CATEGORY = new GSSettingCategory("betterPistons");
@@ -121,6 +124,7 @@ public class GSTpsModule implements GSIModule {
 	public final GSIntegerSetting sSyncPacketInterval;
 	public final GSIntegerSetting sTpsHotkeyMode;
 	public final GSIntegerSetting sTpsHotkeyFeedback;
+	public final GSFloatSetting sHotkeySpeedupAmount;
 	public final GSBooleanSetting sRequireOP;
 	public final GSBooleanSetting cNormalMovement;
 	public final GSBooleanSetting cTweakerooFreecamHack;
@@ -150,8 +154,9 @@ public class GSTpsModule implements GSIModule {
 		cShiftPitch = new GSBooleanSetting("shiftPitch", true);
 		cSyncTick = new GSBooleanSetting("syncTick", true);
 		sSyncPacketInterval = new GSIntegerSetting("syncPacketInterval", 10, 1, 20);
-		sTpsHotkeyMode = new GSIntegerSetting("hotkeyMode", HOTKEY_MODE_CREATIVE, 0, 2);
+		sTpsHotkeyMode = new GSIntegerSetting("hotkeyMode", HOTKEY_MODE_ALL, 0, 2);
 		sTpsHotkeyFeedback = new GSIntegerSetting("hotkeyFeedback", HOTKEY_FEEDBACK_STATUS, 0, 2);
+		sHotkeySpeedupAmount = new GSFloatSetting("hotkeySpeedupAmount", 2.0f, HOTKEY_SPEEDUP_AMOUNT_MIN, HOTKEY_SPEEDUP_AMOUNT_MAX, HOTKEY_SPEEDUP_AMOUNT_STEP);
 		sRequireOP = new GSBooleanSetting("requireOP", true);
 		cNormalMovement = new GSBooleanSetting("normalMovement", true);
 		cTweakerooFreecamHack = new GSBooleanSetting("tweakerooFreecamHack", true);
@@ -236,20 +241,8 @@ public class GSTpsModule implements GSIModule {
 
 	@Override
 	public void registerHotkeys(GSKeyManager keyManager) {
-		keyManager.registerKey("reset", KEY_CATEGORY, GLFW.GLFW_KEY_M, 
-				GSETpsHotkeyType.RESET_TPS, this::onClientHotkey, GSEKeyEventType.PRESS);
-		
-		keyManager.registerKey("increment", KEY_CATEGORY, GLFW.GLFW_KEY_PERIOD, 
-				GSETpsHotkeyType.INCREMENT_TPS, this::onClientHotkey, GSEKeyEventType.PRESS);
-		
-		keyManager.registerKey("decrement", KEY_CATEGORY, GLFW.GLFW_KEY_COMMA, 
-				GSETpsHotkeyType.DECREMENT_TPS, this::onClientHotkey, GSEKeyEventType.PRESS);
-		
-		keyManager.registerKey("double", KEY_CATEGORY, GLFW.GLFW_KEY_K, 
-				GSETpsHotkeyType.DOUBLE_TPS, this::onClientHotkey, GSEKeyEventType.PRESS);
-
-		keyManager.registerKey("halve", KEY_CATEGORY, GLFW.GLFW_KEY_J, 
-				GSETpsHotkeyType.HALVE_TPS, this::onClientHotkey, GSEKeyEventType.PRESS);
+		keyManager.registerKey("toggleSpeedup", KEY_CATEGORY, GLFW.GLFW_KEY_M, 
+				GSETpsHotkeyType.TOGGLE_SPEEDUP, this::onClientHotkey, GSEKeyEventType.PRESS);
 	}
 	
 	@Override
@@ -260,6 +253,7 @@ public class GSTpsModule implements GSIModule {
 			sBroadcastTps,
 			sTpsHotkeyMode,
 			sTpsHotkeyFeedback,
+			sHotkeySpeedupAmount,
 			sRestoreTickrate,
 			sPrettySand
 		);
@@ -282,6 +276,8 @@ public class GSTpsModule implements GSIModule {
 								playerManager.sendCommandTree(player);
 						}
 					});
+				} else if (setting == sHotkeySpeedupAmount && isSpeedupEnabled()) {
+					setTps(getSpeedupTps());
 				}
 			}
 		});
@@ -339,22 +335,19 @@ public class GSTpsModule implements GSIModule {
 			@Environment(EnvType.CLIENT)
 			public void accept(GSIClientModuleManager managerClient) {
 				MinecraftClient client = MinecraftClient.getInstance();
-				boolean sneaking = client.options.sneakKey.isPressed();
 				
 				if (managerClient.isG4mespeedServer()) {
 					if (sTpsHotkeyMode.get() != HOTKEY_MODE_DISABLED) {
 						// Only send the hotkey packet when the server
 						// allows us to use hotkey controls.
-						managerClient.sendPacket(new GSTpsHotkeyPacket(hotkeyType, sneaking));
+						managerClient.sendPacket(new GSTpsHotkeyPacket(hotkeyType));
 					}
 				} else if (client.interactionManager != null) { 
 					if (isGameModeAllowingHotkeys(client.interactionManager.getCurrentGameMode())) {
-						performHotkeyAction(hotkeyType, sneaking);
+						performHotkeyAction(hotkeyType);
 						
 						if (client.inGameHud != null) {
-							String formattedTps = TPS_FORMAT.format(tps);
-							Text overlay = Text.translatable("play.info.clientTpsChanged", formattedTps);
-							client.inGameHud.setOverlayMessage(overlay, false);
+							client.inGameHud.setOverlayMessage(getClientSpeedupStatusText(), false);
 						}
 					} else if (client.inGameHud != null) {
 						client.inGameHud.setOverlayMessage(Text.translatable("play.info.hotkeysDisallowed"), false);
@@ -364,18 +357,16 @@ public class GSTpsModule implements GSIModule {
 		});
 	}
 	
-	public void onPlayerHotkey(ServerPlayerEntity player, GSETpsHotkeyType type, boolean sneaking) {
+	public void onPlayerHotkey(ServerPlayerEntity player, GSETpsHotkeyType type) {
 		if (sTpsHotkeyMode.get() != HOTKEY_MODE_DISABLED && isPlayerAllowedTpsChange(player)) {
 			if (isGameModeAllowingHotkeys(player.interactionManager.getGameMode())) {
-				float oldTps = tps;
-				performHotkeyAction(type, sneaking);
+				boolean speedupEnabled = performHotkeyAction(type);
 				
-				if (!GSMathUtil.equalsApproximate(oldTps, tps)) {
+				if (type == GSETpsHotkeyType.TOGGLE_SPEEDUP) {
 					// Assume that the player changed the tps successfully.
 					manager.runOnServer((serverManager) -> {
 						Text name = player.getDisplayName();
-						String formattedTps = TPS_FORMAT.format(tps);
-						Text feedbackText = Text.translatable("play.info.tpsChanged", name, formattedTps);
+						Text feedbackText = Text.translatable(speedupEnabled ? "play.info.speedupEnabled" : "play.info.speedupDisabled", name);
 						
 						for (ServerPlayerEntity otherPlayer : serverManager.getAllPlayers()) {
 							if (isPlayerAllowedTpsChange(otherPlayer))
@@ -404,71 +395,30 @@ public class GSTpsModule implements GSIModule {
 		}
 	}
 	
-	public void performHotkeyAction(GSETpsHotkeyType type, boolean sneaking) {
-		if (type == GSETpsHotkeyType.RESET_TPS) {
-			resetTps();
-			return;
-		}
-		
-		// Easter egg for changing tps. Instead of changing tps 
-		// normally we are going to change it one note at a time.
-		// For this we'll need some music theory in relation to
-		// the physics of sound:
-
-		// We all know sound is simply waves that have a specific 
-		// frequency. In other words we can express every tone in
-		// music as a given frequency for that tone. There are 12
-		// fundamental tones in each octave - and infinitely many
-		// octaves. The important thing here is that to transform
-		// a signal a single octave up we can simply multiply the
-		// frequency by two. In other words it's simple to switch
-		// between octaves. Tones on the other hand is slightly
-		// different. Here we need some more theory. To step from
-		// one note a constant amount of notes up, we can use the
-		// following formula:
-		//     f_n' = f_n * c, where f_n and f_n' are frequencies
-		//                     and c is constant for that amount.
-
-		// This also means that if c is the constant that steps one
-		// note up then we can step from one octave to the next by
-		// doing f_n' = f_n * c^12. In other words we now know what
-		// the constant c should be for stepping up a single note,
-		// 'cause we could also step up one octave by multiplying by
-		// two! This means that c^12 = 2 <=> c = 2^(1/12).
-		
-		// Now let's apply this theory!
-		
-		switch (type) {
-		case INCREMENT_TPS:
-			if (sneaking) {
-				// Since we're applying the pitch of sound in relation
-				// to targetPitch = pitch * tps / DEFAULT_TPS, we can
-				// simply multiply the tps by this amount to achieve
-				// incrementing the tone by one!
-				setTps(tps * TONE_MULTIPLIER);
-			} else {
-				setTps(tps + TPS_INCREMENT_INTERVAL);
+	public boolean performHotkeyAction(GSETpsHotkeyType type) {
+		if (type == GSETpsHotkeyType.TOGGLE_SPEEDUP) {
+			if (isSpeedupEnabled()) {
+				resetTps();
+				return false;
 			}
-			break;
-		case DECREMENT_TPS:
-			if (sneaking) {
-				// Decrementing one tone is just division by the constant.
-				setTps(tps / TONE_MULTIPLIER);
-			} else {
-				setTps(tps - TPS_INCREMENT_INTERVAL);
-			}
-			break;
-
-		case DOUBLE_TPS:
-			setTps(tps * 2.0f);
-			break;
-		case HALVE_TPS:
-			setTps(tps / 2.0f);
-			break;
-			
-		default:
-			return;
+			setTps(getSpeedupTps());
+			return true;
 		}
+		return isSpeedupEnabled();
+	}
+
+	private float getSpeedupTps() {
+		return DEFAULT_TPS * sHotkeySpeedupAmount.get();
+	}
+
+	public boolean isSpeedupEnabled() {
+		return GSMathUtil.equalsApproximate(tps, getSpeedupTps());
+	}
+
+	private Text getClientSpeedupStatusText() {
+		if (isSpeedupEnabled())
+			return Text.translatable("play.info.clientSpeedupEnabled");
+		return Text.translatable("play.info.clientSpeedupDisabled");
 	}
 
 	@Override
@@ -543,7 +493,7 @@ public class GSTpsModule implements GSIModule {
 	public boolean isGameModeAllowingHotkeys(GameMode gameMode) {
 		switch (sTpsHotkeyMode.get()) {
 		case HOTKEY_MODE_CREATIVE:
-			return (gameMode == GameMode.CREATIVE || gameMode == GameMode.SPECTATOR);
+			return (gameMode == GameMode.CREATIVE || gameMode == GameMode.SPECTATOR || gameMode == GameMode.SURVIVAL);
 		case HOTKEY_MODE_ALL:
 			return true;
 		case HOTKEY_MODE_DISABLED:
@@ -553,8 +503,14 @@ public class GSTpsModule implements GSIModule {
 	}
 
 	public boolean isPlayerAllowedTpsChange(PlayerEntity player) {
-		if (sRequireOP.get())
-			return player.getPermissions().hasPermission(GSServerController.OP_PERMISSION);
+		if (sRequireOP.get()) {
+			if (player.getPermissions().hasPermission(GSServerController.OP_PERMISSION))
+				return true;
+			if (player instanceof ServerPlayerEntity serverPlayer) {
+				return GSServerController.getInstance().isExtensionInstalled(serverPlayer, GSCoreExtension.UID);
+			}
+			return false;
+		}
 		return true;
 	}
 	

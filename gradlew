@@ -114,6 +114,12 @@ esac
 
 CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
 
+# Fallback to Prism Launcher Flatpak's managed JDK when JAVA_HOME is unset.
+PRISM_JAVA_HOME="$HOME/.var/app/org.prismlauncher.PrismLauncher/data/PrismLauncher/java/java-runtime-delta"
+if [ -z "$JAVA_HOME" ] && [ -x "$PRISM_JAVA_HOME/bin/java" ] ; then
+    JAVA_HOME="$PRISM_JAVA_HOME"
+fi
+
 
 # Determine the Java command to use to start the JVM.
 if [ -n "$JAVA_HOME" ] ; then

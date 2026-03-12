@@ -86,6 +86,7 @@ publishing {
 void setupRepositories(RepositoryHandler repositories) {
 	//repositories.mavenLocal() // uncomment for testing
 	def ENV = System.getenv()
+	def isPublishingTask = gradle.startParameter.taskNames.any { it.toLowerCase().contains("publish") }
 	if (ENV.MAVEN_URL && ENV.MAVEN_ALIAS && ENV.MAVEN_TOKEN) {
 		repositories.maven {
 			url "${ENV.MAVEN_URL}/releases"
@@ -97,7 +98,9 @@ void setupRepositories(RepositoryHandler repositories) {
 				basic(BasicAuthentication)
 			}
 		}
+	} else if (isPublishingTask) {
+		throw new GradleException("No Maven credentials specified")
 	} else {
-		throw GradleException("No Maven credentials specified")
+		logger.lifecycle("No Maven credentials specified; skipping publish repository setup.")
 	}
 }

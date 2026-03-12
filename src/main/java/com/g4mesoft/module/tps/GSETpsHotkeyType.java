@@ -2,13 +2,7 @@ package com.g4mesoft.module.tps;
 
 public enum GSETpsHotkeyType {
 
-	RESET_TPS(0),
-	
-	INCREMENT_TPS(1),
-	DECREMENT_TPS(2),
-	
-	DOUBLE_TPS(3),
-	HALVE_TPS(4);
+	TOGGLE_SPEEDUP(0);
 
 	private static final GSETpsHotkeyType[] HOTKEY_TYPES;
 	

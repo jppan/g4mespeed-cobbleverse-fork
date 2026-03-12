@@ -177,7 +177,7 @@ setting.betterPistons.immediateBlockBroadcast.desc=Broadcasts all block changes 
 ###########   Game Information    ############
 
 play.info.tpsChanged=%s changed the tps to %s
-play.info.hotkeysDisallowed=Must be in Creative or Spectator to use hotkeys
+play.info.hotkeysDisallowed=Must be in Creative, Spectator, or Survival to use hotkeys
 
 # Translation version 5 (v1.1.1)
 :5
@@ -212,3 +212,23 @@ setting.tps.prettySand.0=Disabled
 setting.tps.prettySand.1=Best Performance
 setting.tps.prettySand.2=Move On Server
 setting.tps.prettySand.desc=Improves visual movement of falling block entities. Best Performance achieves this with minimal networking overhead. Move On Server ensures exact server-client synchronization, but overrides Corrected Entity Pushing and significantly increases network usage. The latter is therefore only recommended in specific circumstances.
+
+# Translation version 10 (v1.4.13)
+:10
+
+hotkey.tps.toggleSpeedup=Toggle Speedup
+
+setting.tps.tpsLabel=Speedup Indicator
+setting.tps.tpsLabel.desc=Displays whether speedup is enabled in the specified location of the in-game HUD.
+
+setting.tps.hotkeyFeedback.desc=Specifies where feedback from the speedup toggle hotkey will be displayed.
+setting.tps.hotkeySpeedupAmount=Hotkey Speedup Amount
+setting.tps.hotkeySpeedupAmount.desc=Multiplier applied to default TPS when speedup is enabled via hotkey.
+
+play.info.clientSpeedupEnabled=Client speedup enabled
+play.info.clientSpeedupDisabled=Client speedup disabled
+play.info.speedupEnabled=%s enabled speedup
+play.info.speedupDisabled=%s disabled speedup
+play.info.speedupIndicatorEnabled=Speedup: Enabled
+play.info.speedupIndicatorDisabled=Speedup: Disabled
+play.info.speedupIndicatorValue=Speedup: %sx

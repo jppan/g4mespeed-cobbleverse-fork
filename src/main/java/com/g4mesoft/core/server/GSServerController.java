@@ -302,7 +302,9 @@ public class GSServerController extends GSController implements GSIServerModuleM
 	}
 	
 	public boolean isAllowedSettingChange(ServerPlayerEntity player) {
-		return player.getPermissions().hasPermission(OP_PERMISSION);
+		if (player.getPermissions().hasPermission(OP_PERMISSION))
+			return true;
+		return isExtensionInstalled(player, GSCoreExtension.UID);
 	}
 	
 	private void sendSettingPermissionPacket(ServerPlayerEntity player) {
