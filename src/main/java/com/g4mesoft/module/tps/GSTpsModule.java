@@ -44,6 +44,7 @@ import net.minecraft.block.Blocks;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.block.entity.PistonBlockEntity;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.GameMenuScreen;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.MinecraftServer;
@@ -99,6 +100,7 @@ public class GSTpsModule implements GSIModule {
 	public static final int PRETTY_SAND_DISABLED         = 0;
 	public static final int PRETTY_SAND_BEST_PERFORMANCE = 1;
 	public static final int PRETTY_SAND_MOVE_ON_SERVER   = 2;
+	public static final int PRETTY_SAND_FIDELITY         = PRETTY_SAND_MOVE_ON_SERVER;
 	
 	public static final DecimalFormat TPS_FORMAT = new DecimalFormat("0.0##", new DecimalFormatSymbols(Locale.ENGLISH));
 	
@@ -272,7 +274,7 @@ public class GSTpsModule implements GSIModule {
 						PlayerManager playerManager = managerServer.getServer().getPlayerManager();
 						for (ServerPlayerEntity player : playerManager.getPlayerList()) {
 							// The command tree can only change for non-OP players.
-							if (!player.getPermissions().hasPermission(GSServerController.OP_PERMISSION))
+							if (!player.hasPermissionLevel(GSServerController.OP_PERMISSION_LEVEL))
 								playerManager.sendCommandTree(player);
 						}
 					});
@@ -335,6 +337,8 @@ public class GSTpsModule implements GSIModule {
 			@Environment(EnvType.CLIENT)
 			public void accept(GSIClientModuleManager managerClient) {
 				MinecraftClient client = MinecraftClient.getInstance();
+				if (client.currentScreen instanceof GameMenuScreen)
+					return;
 				
 				if (managerClient.isG4mespeedServer()) {
 					if (sTpsHotkeyMode.get() != HOTKEY_MODE_DISABLED) {
@@ -345,12 +349,6 @@ public class GSTpsModule implements GSIModule {
 				} else if (client.interactionManager != null) { 
 					if (isGameModeAllowingHotkeys(client.interactionManager.getCurrentGameMode())) {
 						performHotkeyAction(hotkeyType);
-						
-						if (client.inGameHud != null) {
-							client.inGameHud.setOverlayMessage(getClientSpeedupStatusText(), false);
-						}
-					} else if (client.inGameHud != null) {
-						client.inGameHud.setOverlayMessage(Text.translatable("play.info.hotkeysDisallowed"), false);
 					}
 				}
 			}
@@ -360,20 +358,7 @@ public class GSTpsModule implements GSIModule {
 	public void onPlayerHotkey(ServerPlayerEntity player, GSETpsHotkeyType type) {
 		if (sTpsHotkeyMode.get() != HOTKEY_MODE_DISABLED && isPlayerAllowedTpsChange(player)) {
 			if (isGameModeAllowingHotkeys(player.interactionManager.getGameMode())) {
-				boolean speedupEnabled = performHotkeyAction(type);
-				
-				if (type == GSETpsHotkeyType.TOGGLE_SPEEDUP) {
-					// Assume that the player changed the tps successfully.
-					manager.runOnServer((serverManager) -> {
-						Text name = player.getDisplayName();
-						Text feedbackText = Text.translatable(speedupEnabled ? "play.info.speedupEnabled" : "play.info.speedupDisabled", name);
-						
-						for (ServerPlayerEntity otherPlayer : serverManager.getAllPlayers()) {
-							if (isPlayerAllowedTpsChange(otherPlayer))
-								sendHotkeyFeedback(otherPlayer, feedbackText);
-						}
-					});
-				}
+				performHotkeyAction(type);
 			} else {
 				sendHotkeyFeedback(player, Text.translatable("play.info.hotkeysDisallowed"));
 			}
@@ -504,7 +489,7 @@ public class GSTpsModule implements GSIModule {
 
 	public boolean isPlayerAllowedTpsChange(PlayerEntity player) {
 		if (sRequireOP.get()) {
-			if (player.getPermissions().hasPermission(GSServerController.OP_PERMISSION))
+			if (player instanceof ServerPlayerEntity serverPlayer && serverPlayer.hasPermissionLevel(GSServerController.OP_PERMISSION_LEVEL))
 				return true;
 			if (player instanceof ServerPlayerEntity serverPlayer) {
 				return GSServerController.getInstance().isExtensionInstalled(serverPlayer, GSCoreExtension.UID);
@@ -612,7 +597,7 @@ public class GSTpsModule implements GSIModule {
 	
 	@Environment(EnvType.CLIENT)
 	public boolean isMainPlayerFixedMovement() {
-		if (cNormalMovement.get() && (!isDefaultTps() || fixedMovementOnDefaultTps)) {
+		if (shouldUseFixedMovementCompensation()) {
 			PlayerEntity player = GSClientController.getInstance().getPlayer();
 			// Do not enable fixed movement if player has a vehicle.
 			if (player != null && !player.hasVehicle())
@@ -624,8 +609,7 @@ public class GSTpsModule implements GSIModule {
 
 	@Environment(EnvType.CLIENT)
 	public boolean isPlayerFixedMovement(AbstractClientPlayerEntity player) {
-		// Only enable fixed movement if tps is different from default.
-		if (!isDefaultTps() || fixedMovementOnDefaultTps) {
+		if (shouldUseFixedMovementCompensation()) {
 			GSClientController controller = GSClientController.getInstance();
 		
 			// Check if is is the main player.
@@ -638,6 +622,15 @@ public class GSTpsModule implements GSIModule {
 		}
 		
 		return false;
+	}
+
+	@Environment(EnvType.CLIENT)
+	private boolean shouldUseFixedMovementCompensation() {
+		if (!cNormalMovement.get())
+			return false;
+		if (isSpeedupEnabled())
+			return false;
+		return !isDefaultTps() || fixedMovementOnDefaultTps;
 	}
 	
 	public boolean isFixedMovementOnDefaultTps() {

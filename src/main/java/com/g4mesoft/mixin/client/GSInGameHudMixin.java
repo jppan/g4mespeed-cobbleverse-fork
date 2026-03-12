@@ -1,6 +1,5 @@
 package com.g4mesoft.mixin.client;
 
-import org.joml.Matrix3x2fStack;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -19,6 +18,7 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.hud.DebugHud;
 import net.minecraft.client.gui.hud.InGameHud;
 import net.minecraft.client.render.RenderTickCounter;
+import net.minecraft.client.util.math.MatrixStack;
 
 @Mixin(InGameHud.class)
 public abstract class GSInGameHudMixin {
@@ -35,7 +35,8 @@ public abstract class GSInGameHudMixin {
 	@Shadow public abstract TextRenderer getTextRenderer();
 
 	@Inject(
-		method = "renderBossBarHud",
+		method = "render",
+		require = 0,
 		at = @At(
 			value = "INVOKE",
 			shift = Shift.BEFORE,
@@ -47,14 +48,15 @@ public abstract class GSInGameHudMixin {
 	)
 	private void onRenderBeforeBossBar(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
 		if (GSClientController.getInstance().getTpsModule().cTpsLabel.get() == GSTpsModule.TPS_LABEL_TOP_CENTER) {
-			Matrix3x2fStack matrixStack = context.getMatrices();
-			matrixStack.pushMatrix();
-			matrixStack.translate(0.0f, client.textRenderer.fontHeight + 5);
+			MatrixStack matrixStack = context.getMatrices();
+			matrixStack.push();
+			matrixStack.translate(0.0f, client.textRenderer.fontHeight + 5, 0.0f);
 		}
 	}
 
 	@Inject(
-		method = "renderBossBarHud",
+		method = "render",
+		require = 0,
 		at = @At(
 			value = "INVOKE",
 			shift = Shift.AFTER,
@@ -66,20 +68,12 @@ public abstract class GSInGameHudMixin {
 	)
 	private void onRenderAfterBossBar(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
 		if (GSClientController.getInstance().getTpsModule().cTpsLabel.get() == GSTpsModule.TPS_LABEL_TOP_CENTER)
-			context.getMatrices().popMatrix();
+			context.getMatrices().pop();
 	}
 	
 	@Inject(
 		method = "render",
-		at = @At(
-			value = "INVOKE",
-			shift = Shift.BEFORE, 
-			target =
-				"Lnet/minecraft/client/gui/hud/InGameHud;renderSubtitlesHud(" +
-					"Lnet/minecraft/client/gui/DrawContext;" +
-					"Z" +
-				")V"
-		)
+		at = @At("TAIL")
 	)
 	private void onRenderBeforeSubtitles(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
 		GSClientController controller = GSClientController.getInstance();
@@ -112,7 +106,7 @@ public abstract class GSInGameHudMixin {
 			default:
 				lx = TPS_LABEL_MAGIN;
 				break;
-				}
+			}
 				
 			context.fill(lx - 1, ly - 1, lx + lw, ly + lh, LABEL_BACKGROUND_COLOR);
 			context.drawText(font, indicator, lx, ly, LABEL_ENABLED_COLOR, false);

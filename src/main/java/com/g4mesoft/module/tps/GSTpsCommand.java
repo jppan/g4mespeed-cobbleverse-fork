@@ -24,7 +24,7 @@ public final class GSTpsCommand {
 		LiteralArgumentBuilder<ServerCommandSource> builder = CommandManager.literal("tps").requires(context -> {
 			GSTpsModule tpsModule = GSServerController.getInstance().getTpsModule();
 			if (tpsModule.sRequireOP.get()) {
-				if (context.getPermissions().hasPermission(GSServerController.OP_PERMISSION))
+				if (context.hasPermissionLevel(GSServerController.OP_PERMISSION_LEVEL))
 					return true;
 				try {
 					ServerPlayerEntity player = context.getPlayerOrThrow();

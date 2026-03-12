@@ -5,18 +5,16 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.At.Shift;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Slice;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.g4mesoft.core.client.GSClientController;
 import com.g4mesoft.hotkey.GSEKeyEventType;
 import com.g4mesoft.hotkey.GSKeyManager;
 
+import net.minecraft.client.gui.screen.GameMenuScreen;
 import net.minecraft.client.Keyboard;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.input.KeyInput;
 
 @Mixin(Keyboard.class)
 public class GSKeyboardMixin {
@@ -24,38 +22,28 @@ public class GSKeyboardMixin {
 	@Shadow @Final private MinecraftClient client;
 	
 	@Inject(
-		method = "onKey(JILnet/minecraft/client/input/KeyInput;)V",
+		method = "onKey(JIIII)V",
 		at = @At("HEAD")
 	)
-	private void onKeyEvent(long windowHandle, int action, KeyInput input, CallbackInfo ci) {
+	private void onKeyEvent(long windowHandle, int key, int scancode, int action, int mods, CallbackInfo ci) {
 		if (windowHandle == client.getWindow().getHandle()) {
 			GSKeyManager keyManager = GSClientController.getInstance().getKeyManager();
 
 			keyManager.clearEventQueue();
 			if (action == GLFW.GLFW_RELEASE) {
-				keyManager.onKeyReleased(input);
+				keyManager.onKeyReleased(key, scancode, mods);
 			} else if (action == GLFW.GLFW_PRESS) {
-				keyManager.onKeyPressed(input);
+				keyManager.onKeyPressed(key, scancode, mods);
 			}
 		}
 	}
 
 	@Inject(
-		method="onKey(JILnet/minecraft/client/input/KeyInput;)V",
-		slice = @Slice(
-			from = @At(
-				value = "INVOKE",
-				shift = Shift.AFTER,
-				target =
-					"Lnet/minecraft/client/util/InputUtil;fromKeyCode(" +
-						"Lnet/minecraft/client/input/KeyInput;" +
-					")Lnet/minecraft/client/util/InputUtil$Key;"
-			)
-		),
+		method="onKey(JIIII)V",
 		at = @At(
 			value = "INVOKE",
 			ordinal = 0,
-			shift = Shift.AFTER,
+			shift = At.Shift.AFTER, 
 			target =
 				"Lnet/minecraft/client/option/KeyBinding;setKeyPressed(" +
 					"Lnet/minecraft/client/util/InputUtil$Key;" +
@@ -63,22 +51,12 @@ public class GSKeyboardMixin {
 				")V"
 		)
 	)
-	private void onKeyReleased(long windowHandle, int action, KeyInput input, CallbackInfo ci) {
+	private void onKeyReleased(long windowHandle, int key, int scancode, int action, int mods, CallbackInfo ci) {
 		GSClientController.getInstance().getKeyManager().dispatchEvents(GSEKeyEventType.RELEASE);
 	}
 
 	@Inject(
-		method="onKey(JILnet/minecraft/client/input/KeyInput;)V",
-		slice = @Slice(
-			from = @At(
-				value = "INVOKE",
-				shift = Shift.AFTER,
-				target =
-					"Lnet/minecraft/client/util/InputUtil;fromKeyCode(" +
-						"Lnet/minecraft/client/input/KeyInput;" +
-					")Lnet/minecraft/client/util/InputUtil$Key;"
-			)
-		),
+		method="onKey(JIIII)V",
 		at = @At(
 			value = "INVOKE",
 			shift = At.Shift.BEFORE, 
@@ -88,8 +66,26 @@ public class GSKeyboardMixin {
 				")V"
 		)
 	)
-	private void onKeyPressRepeat(long windowHandle, int action, KeyInput input, CallbackInfo ci) {
+	private void onKeyPressRepeat(long windowHandle, int key, int scancode, int action, int mods, CallbackInfo ci) {
 		if (action == GLFW.GLFW_PRESS)
 			GSClientController.getInstance().getKeyManager().dispatchEvents(GSEKeyEventType.PRESS);
+	}
+
+	@Inject(
+		method = "onKey(JIIII)V",
+		at = @At("TAIL")
+	)
+	private void onKeyFallbackDispatchInScreens(long windowHandle, int key, int scancode, int action, int mods, CallbackInfo ci) {
+		if (windowHandle != client.getWindow().getHandle())
+			return;
+		if (client.currentScreen == null || client.currentScreen instanceof GameMenuScreen)
+			return;
+
+		GSKeyManager keyManager = GSClientController.getInstance().getKeyManager();
+		if (action == GLFW.GLFW_RELEASE) {
+			keyManager.dispatchEvents(GSEKeyEventType.RELEASE);
+		} else if (action == GLFW.GLFW_PRESS) {
+			keyManager.dispatchEvents(GSEKeyEventType.PRESS);
+		}
 	}
 }
